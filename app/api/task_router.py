@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Response, status
 
 from app.core.dependencies import (
     CurrentProjectMember,
@@ -54,13 +54,10 @@ def delete_task(task: CurrentProjectTask, db: DbSession) -> None:
 @router.get("/tasks", response_model=TaskListResponse)
 def search_tasks(
     search_request: Annotated[TaskSearchRequest, Query()],
+    response: Response,
     db: DbSession,
     current_user: CurrentUser,
 ) -> TaskListResponse:
-    tasks, total = task_service.search_tasks(db, current_user.id, search_request)
-    return TaskListResponse(
-        items=[TaskResponse.from_task(task) for task in tasks],
-        total=total,
-        limit=search_request.limit,
-        offset=search_request.offset,
-    )
+    search_response, is_cache_hit = task_service.search_tasks(db, current_user.id, search_request)
+    response.headers["X-Cache"] = "HIT" if is_cache_hit else "MISS"
+    return search_response

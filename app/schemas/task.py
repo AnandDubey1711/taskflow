@@ -122,6 +122,11 @@ class TaskSearchRequest(BaseModel):
     limit: int = Field(default=20, ge=1, le=100)
     offset: int = Field(default=0, ge=0)
 
+    @field_validator("project_id", "status", "assignee_id")
+    @classmethod
+    def sort_and_deduplicate(cls, values: list) -> list:
+        return sorted(set(values))
+
     @model_validator(mode="after")
     def check_due_range(self) -> Self:
         if self.due_from and self.due_to and self.due_from > self.due_to:

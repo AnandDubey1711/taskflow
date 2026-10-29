@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 
@@ -58,3 +58,12 @@ def update_project(db: Session, project: Project, update_request: ProjectUpdateR
 def delete_project(db: Session, project: Project) -> None:
     db.delete(project)
     db.commit()
+
+
+def bump_task_version(db: Session, project_id: uuid.UUID) -> None:
+    db.execute(
+        update(Project)
+        .where(Project.id == project_id)
+        .values(task_version=Project.task_version + 1)
+        .execution_options(synchronize_session=False)
+    )

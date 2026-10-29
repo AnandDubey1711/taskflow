@@ -10,12 +10,19 @@ from app.models.base import utc_now
 from app.schemas.task import (
     SortOrder,
     TaskCreateRequest,
+    TaskListResponse,
+    TaskResponse,
     TaskSearchRequest,
     TaskSortField,
     TaskUpdateRequest,
 )
 from app.schemas.task_event import TaskEvent
-from app.services import project_member_service, task_event_service
+from app.services import (
+    project_member_service,
+    project_service,
+    task_cache_service,
+    task_event_service,
+)
 
 
 def ensure_assignee_is_member(
@@ -49,6 +56,7 @@ def create_task(db: Session, creator: ProjectMember, create_request: TaskCreateR
         creator_id=creator.user_id,
     )
     db.add(task)
+    project_service.bump_task_version(db, creator.project_id)
     db.commit()
     task_event_service.publish_task_events(
         [task_event_service.build_assignment_event(task, creator.user_id, None)]
@@ -75,13 +83,24 @@ def start_of_day(day: date) -> datetime:
     return datetime.combine(day, time.min, tzinfo=UTC)
 
 
+def list_searchable_project_versions(
+    db: Session, user_id: uuid.UUID, requested_project_ids: list[uuid.UUID]
+) -> list[tuple[uuid.UUID, int]]:
+    query = (
+        select(Project.id, Project.task_version)
+        .join(ProjectMember, ProjectMember.project_id == Project.id)
+        .where(ProjectMember.user_id == user_id)
+        .order_by(Project.id)
+    )
+    if requested_project_ids:
+        query = query.where(Project.id.in_(requested_project_ids))
+    return [(project_id, task_version) for project_id, task_version in db.execute(query)]
+
+
 def build_search_conditions(
-    user_id: uuid.UUID, search_request: TaskSearchRequest
+    project_ids: list[uuid.UUID], search_request: TaskSearchRequest
 ) -> list[ColumnElement[bool]]:
-    member_project_ids = select(ProjectMember.project_id).where(ProjectMember.user_id == user_id)
-    conditions = [Task.project_id.in_(member_project_ids)]
-    if search_request.project_id:
-        conditions.append(Task.project_id.in_(search_request.project_id))
+    conditions = [Task.project_id.in_(project_ids)]
     if search_request.status:
         conditions.append(Task.status.in_(search_request.status))
     assignee_conditions = []
@@ -100,10 +119,10 @@ def build_search_conditions(
     return conditions
 
 
-def search_tasks(
-    db: Session, user_id: uuid.UUID, search_request: TaskSearchRequest
+def query_tasks(
+    db: Session, project_ids: list[uuid.UUID], search_request: TaskSearchRequest
 ) -> tuple[list[Task], int]:
-    conditions = build_search_conditions(user_id, search_request)
+    conditions = build_search_conditions(project_ids, search_request)
     total = db.scalar(select(func.count()).select_from(Task).where(*conditions)) or 0
     sort_column = TASK_SORT_COLUMNS[search_request.sort]
     sort_expression = (
@@ -117,6 +136,31 @@ def search_tasks(
         .offset(search_request.offset)
     )
     return list(tasks), total
+
+
+def search_tasks(
+    db: Session, user_id: uuid.UUID, search_request: TaskSearchRequest
+) -> tuple[TaskListResponse, bool]:
+    project_versions = list_searchable_project_versions(db, user_id, search_request.project_id)
+    if not project_versions:
+        empty_response = TaskListResponse(
+            items=[], total=0, limit=search_request.limit, offset=search_request.offset
+        )
+        return empty_response, False
+    cache_key = task_cache_service.build_search_cache_key(project_versions, search_request)
+    cached_response = task_cache_service.read_cached_search(cache_key)
+    if cached_response is not None:
+        return cached_response, True
+    project_ids = [project_id for project_id, _ in project_versions]
+    tasks, total = query_tasks(db, project_ids, search_request)
+    search_response = TaskListResponse(
+        items=[TaskResponse.from_task(task) for task in tasks],
+        total=total,
+        limit=search_request.limit,
+        offset=search_request.offset,
+    )
+    task_cache_service.write_cached_search(cache_key, search_response)
+    return search_response, False
 
 
 def should_rearm_overdue_check(
@@ -140,6 +184,7 @@ def update_task(
         setattr(task, field_name, value)
     if should_rearm_overdue_check(task, previous_due_date, previous_status):
         task.overdue_notified_at = None
+    project_service.bump_task_version(db, task.project_id)
     db.commit()
     task_event_service.publish_task_events(
         [
@@ -151,6 +196,7 @@ def update_task(
 
 
 def delete_task(db: Session, task: Task) -> None:
+    project_service.bump_task_version(db, task.project_id)
     db.delete(task)
     db.commit()
 

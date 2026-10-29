@@ -13,7 +13,7 @@ from app.core.errors import (
 )
 from app.models import NotificationType, Project, ProjectMember, ProjectRole, Task, User
 from app.schemas.task_event import TaskEvent
-from app.services import task_event_service
+from app.services import project_service, task_event_service
 
 
 def get_project_member(
@@ -64,6 +64,8 @@ def remove_project_member(db: Session, actor: ProjectMember, user_id: uuid.UUID)
         .returning(Task.id)
         .execution_options(synchronize_session=False)
     ).all()
+    if unassigned_task_ids:
+        project_service.bump_task_version(db, actor.project_id)
     db.delete(project_member)
     db.commit()
     task_event_service.publish_task_events(
