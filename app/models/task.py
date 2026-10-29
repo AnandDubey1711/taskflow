@@ -2,12 +2,24 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import (
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    Uuid,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, UtcDateTime, utc_now
 from app.models.project import Project
 from app.models.user import User
+
+OVERDUE_CANDIDATE_CONDITION = "status <> 'done' AND overdue_notified_at IS NULL"
 
 
 class TaskStatus(StrEnum):
@@ -23,6 +35,12 @@ class Task(Base):
         Index("ix_tasks_project_id_status", "project_id", "status"),
         Index("ix_tasks_project_id_assignee_id", "project_id", "assignee_id"),
         Index("ix_tasks_project_id_due_date", "project_id", "due_date"),
+        Index(
+            "ix_tasks_overdue_candidates",
+            "due_date",
+            postgresql_where=text(OVERDUE_CANDIDATE_CONDITION),
+            sqlite_where=text(OVERDUE_CANDIDATE_CONDITION),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -47,6 +65,7 @@ class Task(Base):
         Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     due_date: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    overdue_notified_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     creator_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(

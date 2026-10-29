@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -45,3 +45,21 @@ def resolve_user_session(db: Session, token: str) -> UserSession | None:
 def delete_user_session(db: Session, user_session: UserSession) -> None:
     db.delete(user_session)
     db.commit()
+
+
+def delete_expired_user_sessions(db: Session) -> int:
+    settings = get_settings()
+    now = utc_now()
+    deleted_session_ids = db.scalars(
+        delete(UserSession)
+        .where(
+            or_(
+                UserSession.last_seen_at < now - timedelta(hours=settings.session_idle_hours),
+                UserSession.created_at < now - timedelta(days=settings.session_max_days),
+            )
+        )
+        .returning(UserSession.id)
+        .execution_options(synchronize_session=False)
+    ).all()
+    db.commit()
+    return len(deleted_session_ids)

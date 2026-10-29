@@ -60,3 +60,7 @@ class TaskNotFoundError(NotFoundError):
 
 class TaskAssigneeNotMemberError(UnprocessableError):
     detail = "Assignee must be a member of the project"
+
+
+class NotificationNotFoundError(NotFoundError):
+    detail = "Notification not found"

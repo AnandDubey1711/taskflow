@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     session_max_days: int = 30
     session_touch_minutes: int = 5
     bcrypt_rounds: int = 12
+    overdue_check_seconds: int = 60
 
 
 @lru_cache

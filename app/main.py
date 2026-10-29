@@ -1,15 +1,20 @@
+import logging
+
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.api import (
     auth_router,
+    notification_router,
     ops_router,
     project_member_router,
     project_router,
     task_router,
 )
 from app.core.errors import DomainError
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
 
 app = FastAPI(title="TaskFlow")
 
@@ -35,3 +40,4 @@ app.include_router(auth_router.router)
 app.include_router(project_router.router)
 app.include_router(project_member_router.router)
 app.include_router(task_router.router)
+app.include_router(notification_router.router)

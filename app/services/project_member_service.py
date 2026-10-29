@@ -11,7 +11,9 @@ from app.core.errors import (
     ProjectOwnerRequiredError,
     UserNotFoundError,
 )
-from app.models import Project, ProjectMember, ProjectRole, Task, User
+from app.models import NotificationType, Project, ProjectMember, ProjectRole, Task, User
+from app.schemas.task_event import TaskEvent
+from app.services import task_event_service
 
 
 def get_project_member(
@@ -55,11 +57,23 @@ def remove_project_member(db: Session, actor: ProjectMember, user_id: uuid.UUID)
         raise ProjectMemberNotFoundError
     if project_member.role == ProjectRole.OWNER:
         raise ProjectOwnerRemovalError
-    db.execute(
+    unassigned_task_ids = db.scalars(
         update(Task)
         .where(Task.project_id == actor.project_id, Task.assignee_id == user_id)
         .values(assignee_id=None)
-        .execution_options(synchronize_session="fetch")
-    )
+        .returning(Task.id)
+        .execution_options(synchronize_session=False)
+    ).all()
     db.delete(project_member)
     db.commit()
+    task_event_service.publish_task_events(
+        [
+            TaskEvent(
+                type=NotificationType.TASK_UNASSIGNED,
+                task_id=task_id,
+                actor_id=actor.user_id,
+                previous_assignee_id=user_id,
+            )
+            for task_id in unassigned_task_ids
+        ]
+    )

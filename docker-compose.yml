@@ -1,16 +1,46 @@
+x-app: &app
+  build: .
+  environment:
+    DATABASE_URL: postgresql+psycopg://taskflow:taskflow@postgres:5432/taskflow
+    REDIS_URL: redis://redis:6379/0
+    OVERDUE_CHECK_SECONDS: ${OVERDUE_CHECK_SECONDS:-60}
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+
 services:
-  api:
+  migrate:
     build: .
-    ports:
-      - "${API_PORT:-8000}:8000"
+    command: ["alembic", "upgrade", "head"]
     environment:
       DATABASE_URL: postgresql+psycopg://taskflow:taskflow@postgres:5432/taskflow
-      REDIS_URL: redis://redis:6379/0
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
+
+  api:
+    <<: *app
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "${API_PORT:-8000}:8000"
+
+  worker:
+    <<: *app
+    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=info"]
+
+  beat:
+    <<: *app
+    command:
+      - celery
+      - -A
+      - app.worker.celery_app
+      - beat
+      - --loglevel=info
+      - --schedule=/tmp/celerybeat-schedule
 
   postgres:
     image: postgres:16-alpine

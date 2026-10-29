@@ -22,9 +22,12 @@ def get_task(task: CurrentProjectTask) -> TaskResponse:
 
 @router.patch("/{task_id}", response_model=TaskResponse)
 def update_task(
-    update_request: TaskUpdateRequest, task: CurrentProjectTask, db: DbSession
+    update_request: TaskUpdateRequest,
+    task: CurrentProjectTask,
+    project_member: CurrentProjectMember,
+    db: DbSession,
 ) -> TaskResponse:
-    updated_task = task_service.update_task(db, task, update_request)
+    updated_task = task_service.update_task(db, project_member, task, update_request)
     return TaskResponse.from_task(updated_task)
 
 
