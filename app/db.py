@@ -11,11 +11,11 @@ connect_args = {"check_same_thread": False} if settings.database_url.startswith(
 
 engine = create_engine(settings.database_url, connect_args=connect_args, pool_pre_ping=True)
 
-SessionFactory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+DbSessionFactory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
 def get_db() -> Iterator[Session]:
-    db = SessionFactory()
+    db = DbSessionFactory()
     try:
         yield db
     finally:
