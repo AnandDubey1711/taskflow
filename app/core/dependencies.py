@@ -1,12 +1,14 @@
+import uuid
 from typing import Annotated, NoReturn
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.core.errors import ProjectNotFoundError, ProjectOwnerRequiredError
 from app.db import get_db
-from app.models import User, UserSession
-from app.services.user_session_service import resolve_user_session
+from app.models import ProjectMember, ProjectRole, User, UserSession
+from app.services import project_member_service, user_session_service
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -27,7 +29,7 @@ def get_current_user_session(
 ) -> UserSession:
     if credentials is None:
         raise_unauthorized("Not authenticated")
-    user_session = resolve_user_session(db, credentials.credentials)
+    user_session = user_session_service.resolve_user_session(db, credentials.credentials)
     if user_session is None:
         raise_unauthorized("Invalid or expired session")
     return user_session
@@ -41,3 +43,24 @@ def get_current_user(user_session: CurrentUserSession) -> User:
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def require_project_member(
+    project_id: uuid.UUID, db: DbSession, current_user: CurrentUser
+) -> ProjectMember:
+    project_member = project_member_service.get_project_member(db, project_id, current_user.id)
+    if project_member is None:
+        raise ProjectNotFoundError
+    return project_member
+
+
+CurrentProjectMember = Annotated[ProjectMember, Depends(require_project_member)]
+
+
+def require_project_owner(project_member: CurrentProjectMember) -> ProjectMember:
+    if project_member.role != ProjectRole.OWNER:
+        raise ProjectOwnerRequiredError
+    return project_member
+
+
+CurrentProjectOwner = Annotated[ProjectMember, Depends(require_project_owner)]
