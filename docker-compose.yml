@@ -1,7 +1,7 @@
 x-app: &app
   build: .
   environment:
-    DATABASE_URL: postgresql+psycopg://taskflow:taskflow@postgres:5432/taskflow
+    DATABASE_URL: postgresql+psycopg://taskflow:${POSTGRES_PASSWORD:-taskflow}@postgres:5432/taskflow
     REDIS_URL: redis://redis:6379/0
     OVERDUE_CHECK_SECONDS: ${OVERDUE_CHECK_SECONDS:-60}
   depends_on:
@@ -17,7 +17,7 @@ services:
     build: .
     command: ["alembic", "upgrade", "head"]
     environment:
-      DATABASE_URL: postgresql+psycopg://taskflow:taskflow@postgres:5432/taskflow
+      DATABASE_URL: postgresql+psycopg://taskflow:${POSTGRES_PASSWORD:-taskflow}@postgres:5432/taskflow
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,7 +46,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: taskflow
-      POSTGRES_PASSWORD: taskflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taskflow}
       POSTGRES_DB: taskflow
     volumes:
       - postgres_data:/var/lib/postgresql/data

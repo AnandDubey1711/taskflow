@@ -1,0 +1,6 @@
+{$DEPLOY_DOMAIN} {
+	@metrics path /metrics
+	respond @metrics 404
+
+	reverse_proxy api:8000
+}

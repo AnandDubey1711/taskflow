@@ -1,0 +1,40 @@
+services:
+  migrate:
+    restart: "no"
+
+  api:
+    restart: unless-stopped
+    ports: !reset []
+
+  worker:
+    restart: unless-stopped
+
+  beat:
+    restart: unless-stopped
+
+  postgres:
+    restart: unless-stopped
+
+  redis:
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DEPLOY_DOMAIN: ${DEPLOY_DOMAIN:?DEPLOY_DOMAIN must be set}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - api
+
+volumes:
+  redis_data:
+  caddy_data:
