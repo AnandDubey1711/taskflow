@@ -1,5 +1,6 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from enum import StrEnum
 from typing import Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -95,3 +96,41 @@ class TaskResponse(BaseModel):
             created_at=task.created_at,
             updated_at=task.updated_at,
         )
+
+
+class TaskSortField(StrEnum):
+    DUE_DATE = "due_date"
+    CREATED_AT = "created_at"
+    UPDATED_AT = "updated_at"
+    TITLE = "title"
+
+
+class SortOrder(StrEnum):
+    ASC = "asc"
+    DESC = "desc"
+
+
+class TaskSearchRequest(BaseModel):
+    project_id: list[uuid.UUID] = Field(default_factory=list)
+    status: list[TaskStatus] = Field(default_factory=list)
+    assignee_id: list[uuid.UUID] = Field(default_factory=list)
+    is_unassigned: bool | None = None
+    due_from: date | None = None
+    due_to: date | None = None
+    sort: TaskSortField = TaskSortField.CREATED_AT
+    order: SortOrder = SortOrder.DESC
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def check_due_range(self) -> Self:
+        if self.due_from and self.due_to and self.due_from > self.due_to:
+            raise ValueError("due_from must not be after due_to")
+        return self
+
+
+class TaskListResponse(BaseModel):
+    items: list[TaskResponse]
+    total: int
+    limit: int
+    offset: int

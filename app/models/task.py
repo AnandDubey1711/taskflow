@@ -35,6 +35,7 @@ class Task(Base):
         Index("ix_tasks_project_id_status", "project_id", "status"),
         Index("ix_tasks_project_id_assignee_id", "project_id", "assignee_id"),
         Index("ix_tasks_project_id_due_date", "project_id", "due_date"),
+        Index("ix_tasks_project_id_created_at", "project_id", "created_at"),
         Index(
             "ix_tasks_overdue_candidates",
             "due_date",

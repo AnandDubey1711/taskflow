@@ -1,13 +1,19 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, date, datetime, time, timedelta
 
-from sqlalchemy import select, update
-from sqlalchemy.orm import Session
+from sqlalchemy import ColumnElement, func, or_, select, update
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from app.core.errors import TaskAssigneeNotMemberError, TaskNotFoundError
 from app.models import NotificationType, Project, ProjectMember, Task, TaskStatus
 from app.models.base import utc_now
-from app.schemas.task import TaskCreateRequest, TaskUpdateRequest
+from app.schemas.task import (
+    SortOrder,
+    TaskCreateRequest,
+    TaskSearchRequest,
+    TaskSortField,
+    TaskUpdateRequest,
+)
 from app.schemas.task_event import TaskEvent
 from app.services import project_member_service, task_event_service
 
@@ -55,6 +61,62 @@ def get_task(db: Session, project_id: uuid.UUID, task_id: uuid.UUID) -> Task:
     if task is None:
         raise TaskNotFoundError
     return task
+
+
+TASK_SORT_COLUMNS: dict[TaskSortField, InstrumentedAttribute] = {
+    TaskSortField.DUE_DATE: Task.due_date,
+    TaskSortField.CREATED_AT: Task.created_at,
+    TaskSortField.UPDATED_AT: Task.updated_at,
+    TaskSortField.TITLE: Task.title,
+}
+
+
+def start_of_day(day: date) -> datetime:
+    return datetime.combine(day, time.min, tzinfo=UTC)
+
+
+def build_search_conditions(
+    user_id: uuid.UUID, search_request: TaskSearchRequest
+) -> list[ColumnElement[bool]]:
+    member_project_ids = select(ProjectMember.project_id).where(ProjectMember.user_id == user_id)
+    conditions = [Task.project_id.in_(member_project_ids)]
+    if search_request.project_id:
+        conditions.append(Task.project_id.in_(search_request.project_id))
+    if search_request.status:
+        conditions.append(Task.status.in_(search_request.status))
+    assignee_conditions = []
+    if search_request.assignee_id:
+        assignee_conditions.append(Task.assignee_id.in_(search_request.assignee_id))
+    if search_request.is_unassigned is True:
+        assignee_conditions.append(Task.assignee_id.is_(None))
+    if assignee_conditions:
+        conditions.append(or_(*assignee_conditions))
+    if search_request.is_unassigned is False:
+        conditions.append(Task.assignee_id.is_not(None))
+    if search_request.due_from:
+        conditions.append(Task.due_date >= start_of_day(search_request.due_from))
+    if search_request.due_to:
+        conditions.append(Task.due_date < start_of_day(search_request.due_to + timedelta(days=1)))
+    return conditions
+
+
+def search_tasks(
+    db: Session, user_id: uuid.UUID, search_request: TaskSearchRequest
+) -> tuple[list[Task], int]:
+    conditions = build_search_conditions(user_id, search_request)
+    total = db.scalar(select(func.count()).select_from(Task).where(*conditions)) or 0
+    sort_column = TASK_SORT_COLUMNS[search_request.sort]
+    sort_expression = (
+        sort_column.asc() if search_request.order == SortOrder.ASC else sort_column.desc()
+    )
+    tasks = db.scalars(
+        select(Task)
+        .where(*conditions)
+        .order_by(sort_expression.nulls_last(), Task.id)
+        .limit(search_request.limit)
+        .offset(search_request.offset)
+    )
+    return list(tasks), total
 
 
 def should_rearm_overdue_check(

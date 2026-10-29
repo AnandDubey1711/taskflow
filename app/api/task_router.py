@@ -1,13 +1,28 @@
-from fastapi import APIRouter, status
+from typing import Annotated
 
-from app.core.dependencies import CurrentProjectMember, CurrentProjectTask, DbSession
-from app.schemas.task import TaskCreateRequest, TaskResponse, TaskUpdateRequest
+from fastapi import APIRouter, Query, status
+
+from app.core.dependencies import (
+    CurrentProjectMember,
+    CurrentProjectTask,
+    CurrentUser,
+    DbSession,
+)
+from app.schemas.task import (
+    TaskCreateRequest,
+    TaskListResponse,
+    TaskResponse,
+    TaskSearchRequest,
+    TaskUpdateRequest,
+)
 from app.services import task_service
 
-router = APIRouter(prefix="/projects/{project_id}/tasks", tags=["tasks"])
+router = APIRouter(tags=["tasks"])
 
 
-@router.post("", status_code=status.HTTP_201_CREATED, response_model=TaskResponse)
+@router.post(
+    "/projects/{project_id}/tasks", status_code=status.HTTP_201_CREATED, response_model=TaskResponse
+)
 def create_task(
     create_request: TaskCreateRequest, project_member: CurrentProjectMember, db: DbSession
 ) -> TaskResponse:
@@ -15,12 +30,12 @@ def create_task(
     return TaskResponse.from_task(task)
 
 
-@router.get("/{task_id}", response_model=TaskResponse)
+@router.get("/projects/{project_id}/tasks/{task_id}", response_model=TaskResponse)
 def get_task(task: CurrentProjectTask) -> TaskResponse:
     return TaskResponse.from_task(task)
 
 
-@router.patch("/{task_id}", response_model=TaskResponse)
+@router.patch("/projects/{project_id}/tasks/{task_id}", response_model=TaskResponse)
 def update_task(
     update_request: TaskUpdateRequest,
     task: CurrentProjectTask,
@@ -31,6 +46,21 @@ def update_task(
     return TaskResponse.from_task(updated_task)
 
 
-@router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/projects/{project_id}/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_task(task: CurrentProjectTask, db: DbSession) -> None:
     task_service.delete_task(db, task)
+
+
+@router.get("/tasks", response_model=TaskListResponse)
+def search_tasks(
+    search_request: Annotated[TaskSearchRequest, Query()],
+    db: DbSession,
+    current_user: CurrentUser,
+) -> TaskListResponse:
+    tasks, total = task_service.search_tasks(db, current_user.id, search_request)
+    return TaskListResponse(
+        items=[TaskResponse.from_task(task) for task in tasks],
+        total=total,
+        limit=search_request.limit,
+        offset=search_request.offset,
+    )
