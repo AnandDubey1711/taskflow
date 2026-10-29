@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ProjectNotFoundError, ProjectOwnerRequiredError
 from app.db import get_db
-from app.models import ProjectMember, ProjectRole, User, UserSession
-from app.services import project_member_service, user_session_service
+from app.models import ProjectMember, ProjectRole, Task, User, UserSession
+from app.services import project_member_service, task_service, user_session_service
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -64,3 +64,12 @@ def require_project_owner(project_member: CurrentProjectMember) -> ProjectMember
 
 
 CurrentProjectOwner = Annotated[ProjectMember, Depends(require_project_owner)]
+
+
+def require_project_task(
+    task_id: uuid.UUID, project_member: CurrentProjectMember, db: DbSession
+) -> Task:
+    return task_service.get_task(db, project_member.project_id, task_id)
+
+
+CurrentProjectTask = Annotated[Task, Depends(require_project_task)]

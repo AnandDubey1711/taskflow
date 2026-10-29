@@ -18,6 +18,10 @@ class ForbiddenError(DomainError):
     status_code = status.HTTP_403_FORBIDDEN
 
 
+class UnprocessableError(DomainError):
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+
+
 class EmailAlreadyRegisteredError(ConflictError):
     detail = "Email already registered"
 
@@ -48,3 +52,11 @@ class ProjectMemberAlreadyExistsError(ConflictError):
 
 class ProjectOwnerRemovalError(ConflictError):
     detail = "The project owner cannot be removed"
+
+
+class TaskNotFoundError(NotFoundError):
+    detail = "Task not found"
+
+
+class TaskAssigneeNotMemberError(UnprocessableError):
+    detail = "Assignee must be a member of the project"
