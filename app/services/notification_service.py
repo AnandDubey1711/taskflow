@@ -90,11 +90,13 @@ def create_task_event_notifications(db: Session, task_event: TaskEvent) -> list[
         return []
     for notification in notifications:
         logger.info(
-            "notification user=%s type=%s task=%s message=%r",
-            notification.user_id,
-            notification.type.value,
-            task.key,
-            notification.message,
+            "notification delivered",
+            extra={
+                "user_id": notification.user_id,
+                "notification_type": notification.type.value,
+                "task": task.key,
+                "notification_message": notification.message,
+            },
         )
     return notifications
 

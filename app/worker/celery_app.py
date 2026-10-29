@@ -1,7 +1,11 @@
+from typing import Any
+
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import setup_logging
 
 from app.config import get_settings
+from app.core.logging_config import configure_logging
 from app.worker.task_names import (
     CHECK_OVERDUE_TASKS,
     DELETE_EXPIRED_USER_SESSIONS,
@@ -29,3 +33,8 @@ celery_app.conf.update(
         },
     },
 )
+
+
+@setup_logging.connect
+def configure_worker_logging(**kwargs: Any) -> None:
+    configure_logging()

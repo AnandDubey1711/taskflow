@@ -6,6 +6,7 @@ import uuid
 from redis import RedisError
 
 from app.config import get_settings
+from app.core.metrics import TASK_SEARCH_CACHE_LOOKUPS_TOTAL
 from app.core.redis_client import get_redis_client
 from app.schemas.task import TaskListResponse, TaskSearchRequest
 
@@ -32,9 +33,12 @@ def read_cached_search(cache_key: str) -> TaskListResponse | None:
         cached_value = get_redis_client().get(cache_key)
     except RedisError:
         logger.warning("Task search cache read failed for %s", cache_key)
+        TASK_SEARCH_CACHE_LOOKUPS_TOTAL.labels("error").inc()
         return None
     if cached_value is None:
+        TASK_SEARCH_CACHE_LOOKUPS_TOTAL.labels("miss").inc()
         return None
+    TASK_SEARCH_CACHE_LOOKUPS_TOTAL.labels("hit").inc()
     return TaskListResponse.model_validate_json(cached_value)
 
 

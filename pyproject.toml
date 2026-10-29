@@ -17,6 +17,7 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "redis>=5.0",
     "celery[redis]>=5.4",
+    "prometheus-client>=0.20",
 ]
 
 [project.optional-dependencies]

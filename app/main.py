@@ -1,5 +1,3 @@
-import logging
-
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -13,10 +11,14 @@ from app.api import (
     task_router,
 )
 from app.core.errors import DomainError
+from app.core.logging_config import configure_logging
+from app.core.request_tracking import track_request
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
+configure_logging()
 
 app = FastAPI(title="TaskFlow")
+
+app.middleware("http")(track_request)
 
 
 @app.exception_handler(RequestValidationError)
